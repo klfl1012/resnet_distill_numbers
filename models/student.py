@@ -1,5 +1,8 @@
 import torch
 import torch.nn as nn 
+from utils import get_dataloaders
+
+
 
 
 class StudentCNN(nn.Module):
@@ -34,3 +37,40 @@ class StudentCNN(nn.Module):
         x = nn.functional.relu(self.fc1(x))
         x = self.fc2(x)
         return x
+    
+
+def evaluate(model, testloader, device):
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for imgs, labels in testloader:
+            imgs, labels = imgs.to(device), labels.to(device)
+            outs = model(imgs)
+            _, predicted = torch.max(outs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    accuracy = 100 * correct / total
+    print(f"test accuracy: {accuracy:.2f}%")
+
+
+if __name__ == "__main__":  
+    
+    _, testloader = get_dataloaders(batch_size=32, resize=(112, 112))
+    device = "mps" if torch.backends.mps.is_available() else "cpu"  
+    criterion = nn.CrossEntropyLoss()
+
+    student = StudentCNN(   
+        num_filters1=40,
+        num_filters2=32,
+        kernel_size1=1,
+        kernel_size2=1,
+        padding1=1,
+        padding2=1,
+        padding3=1,
+        hidden_units=128
+    ).to(device)
+
+    student.load_state_dict(torch.load("./trained_models/trained_student.pth", map_location=device, weights_only=True), strict=False)
+
+    evaluate(student, testloader, device)

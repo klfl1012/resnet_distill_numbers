@@ -1,18 +1,59 @@
 import torch
 import torchvision.models as models
+import torch.optim as optim, torch.nn as nn
 
 
+# def get_teacher_model(model_path, device):
+#     model = torch.load(model_path, map_location=device, weights_only=False)
+#     model.to(device)
+#     model.eval()
 
-def get_teacher_model(model_path, device):
-    model = torch.load(model_path, map_location=device, weights_only=False)
-    model.to(device)
-    model.eval()
+#     return model
 
-    return model
+
+class Teacher(nn.Module):
+    def __init__(self):
+        super(Teacher, self).__init__()
+
+        pretrained_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+        model_state_dict = pretrained_model.state_dict()
+
+        self.model = models.resnet18(weights=None)
+
+        for key in list(model_state_dict.keys()):
+            if key not in self.model.state_dict() or model_state_dict[key].shape != self.model.state_dict()[key].shape:
+                del model_state_dict[key]
+
+        self.model.load_state_dict(model_state_dict, strict=False)
+
+        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.model.fc = nn.Linear(512, 10) 
+
+    def forward(self, x):
+        return self.model(x)
+    
+    def exrtact_features(self, x):
+        x = self.model.conv1(x)
+        x = self.model.bn1(x)
+        x = self.model.relu(x)
+        x = self.model.maxpool(x)
+        
+        x = self.model.layer1(x)
+        x = self.model.layer2(x)
+        x = self.model.layer3(x)
+        x = self.model.layer4(x)
+
+        x = self.model.avgpool(x)
+        x = torch.flatten(x, 1)
+        return x 
+
 
 
 if __name__ == "__main__":
-    model_path = "trained_teacher_1.pth"
     device = "mps" if torch.backends.mps.is_available() else "cpu"  
-    model = get_teacher_model(model_path, device)
+    model = Teacher().to(device)
+    model.load_state_dict(torch.load("./trained_models/trained_teacher_state_dict.pth", map_location=device))
+    model.eval()
+    features = model.exrtact_features(torch.randn(1, 1, 112, 112).to(device))
+    print(features.shape)
     print(model)

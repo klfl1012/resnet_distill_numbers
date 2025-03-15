@@ -3,21 +3,22 @@ import torch.optim as optim
 import torch.nn as nn
 from torch.utils.data import DataLoader 
 from torchvision import datasets, transforms, models
+from teacher import Teacher
 
 
-def get_teacher_model():
-    pretrained_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-    model = models.resnet18(weights=None)
-    model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-    model.fc = nn.Linear(512, 10)
-    model_state_dict = pretrained_model.state_dict()
+# def get_teacher_model():
+#     pretrained_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+#     model = models.resnet18(weights=None)
+#     model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+#     model.fc = nn.Linear(512, 10)
+#     model_state_dict = pretrained_model.state_dict()
 
-    for key in list(model_state_dict.keys()):
-        if key not in model.state_dict() or model_state_dict[key].shape != model.state_dict()[key].shape:
-            del model_state_dict[key]
+#     for key in list(model_state_dict.keys()):
+#         if key not in model.state_dict() or model_state_dict[key].shape != model.state_dict()[key].shape:
+#             del model_state_dict[key]
 
-    model.load_state_dict(model_state_dict, strict=False)
-    return model
+#     model.load_state_dict(model_state_dict, strict=False)
+#     return model
 
 
 def train_teacher(model, trainloader, criterion, optimizer, epochs, device):
@@ -80,7 +81,8 @@ if __name__ == "__main__":
     testloader = DataLoader(testset, batch_size=batch_size, shuffle=False)
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    model = get_teacher_model().to(device)
+    model = Teacher().to(device)    
+    # model = get_teacher_model().to(device)
 
     criterion = nn.CrossEntropyLoss()   
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -88,5 +90,6 @@ if __name__ == "__main__":
     train_teacher(model, trainloader, criterion, optimizer, epochs, device)
     evaluate(model, testloader, device)
 
-    torch.save(model, "trained_teacher_1.pth")
+    torch.save(model.state_dict(), "./trained_models/trained_teacher_state_dict.pth")
+    
 
