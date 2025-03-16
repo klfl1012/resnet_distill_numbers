@@ -3,11 +3,9 @@ import torch.nn as nn
 from utils import get_dataloaders
 
 
-
-
 class StudentCNN(nn.Module):
 
-    def __init__(self, num_filters1, num_filters2, kernel_size1, kernel_size2, padding1, padding2, padding3, hidden_units):
+    def __init__(self, num_filters1, num_filters2, kernel_size1, kernel_size2, padding1, padding2, padding3, hidden_units, img_size=(224, 224)):
         super(StudentCNN, self).__init__()
 
         self.conv1 = nn.Conv2d(1, num_filters1, kernel_size=kernel_size1, padding=padding1)
@@ -15,7 +13,7 @@ class StudentCNN(nn.Module):
         self.conv3 = nn.Conv2d(num_filters2, num_filters2 * 2, kernel_size=3, padding=padding3)
         self.pool = nn.MaxPool2d(2, 2)
 
-        self._to_linear = self._compute_flattened_size(112, 112)
+        self._to_linear = self._compute_flattened_size(img_size[0], img_size[1])
 
         self.fc1 = nn.Linear(self._to_linear, hidden_units)
         self.fc2 = nn.Linear(hidden_units, 10)
@@ -26,8 +24,10 @@ class StudentCNN(nn.Module):
             x = self.pool(nn.functional.relu(self.conv1(x)))
             x = self.pool(nn.functional.relu(self.conv2(x)))
             x = self.pool(nn.functional.relu(self.conv3(x)))
-            x = x.numel() // x.size(0)
-            return x
+            # x = x.numel() // x.size(0)
+            x = x.view(x.size(0), -1)
+
+            return x.size(1)
 
     def forward(self, x):
         x = self.pool(nn.functional.relu(self.conv1(x)))
@@ -38,6 +38,10 @@ class StudentCNN(nn.Module):
         x = self.fc2(x)
         return x
     
+
+def count_params(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)    
+
 
 def evaluate(model, testloader, device):
     model.eval()
@@ -74,3 +78,5 @@ if __name__ == "__main__":
     student.load_state_dict(torch.load("./trained_models/trained_student.pth", map_location=device, weights_only=True), strict=False)
 
     evaluate(student, testloader, device)
+
+    print(f"Number of parameters: {count_params(student)}")

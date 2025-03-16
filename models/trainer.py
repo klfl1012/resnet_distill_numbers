@@ -1,7 +1,7 @@
 import torch, torch.nn as nn, torch.optim as optim
-from models.student import StudentCNN
-from models.teacher import Teacher
-from models.training.distill import policy_distillation_loss, adversarial_distillation, kd_loss, Discriminator
+from student import StudentCNN
+from teacher import Teacher
+from distill import policy_distillation_loss, adversarial_distillation, kd_loss, Discriminator
 from utils import get_dataloaders
 
 
@@ -9,7 +9,8 @@ class Trainer:
 
     def __init__(self, teacher_path, student_params, trainloader, testloader, device, method="kd", alpha=0.5, temperature=4.0, lr=0.001):
         self.device = device
-        self.teacher = Teacher().load_state_dict(torch.load(teacher_path)).to(device)
+        self.teacher = Teacher().to(device)
+        self.teacher.load_state_dict(torch.load(teacher_path, map_location=device))
         self.student = StudentCNN(**student_params).to(device)  
         self.trainloader = trainloader
         self.testloader = testloader
@@ -25,7 +26,6 @@ class Trainer:
             self.discriminator = Discriminator(feature_dim=feature_dim).to(device)
             self.optimizer_D = optim.Adam(self.discriminator.parameters(), lr=self.lr)
             self.ciriterion_adv = nn.BCELoss()  
-
 
     def train(self, epochs):
         self.teacher.eval()
@@ -81,24 +81,39 @@ class Trainer:
 
 
 if __name__ == "__main__":
-    DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
-    teacher_path = "teacher.pth"
+
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    teacher_path = "./trained_models/trained_teacher_state_dict.pth"
     student_params = {
-        "num_filters1": 10,
+        "num_filters1": 8,
         "num_filters2": 5,
         "kernel_size1": 1,
         "kernel_size2": 1,
         "padding1": 1,
         "padding2": 1,
         "padding3": 1,
-        "hidden_units": 32
+        "hidden_units": 32,
+        "img_size": (224, 224)
     }
+    trainloader, testloader = get_dataloaders(batch_size=32, resize=(224, 224)) 
 
-    trainloader, testloader = get_dataloaders(batch_size=32, resize=(112, 112)) 
-    trainer = Trainer(
+    alphas = [0.5]
+    for alpha in alphas:
+        print(f"Training student with alpha={alpha}")   
+        trainer = Trainer(
+            teacher_path=teacher_path,
+            student_params=student_params,
+            trainloader=trainloader,    
+            testloader=testloader,
+            device=device,
+            method="kd",
+            alpha=0.5,
+            temperature=4.0
+        )
+        trainer.train(epochs=10)
+        trainer.evaluate()
+        torch.save(trainer.student.state_dict(), f"./trained_models/distilled_student_{alpha}.pth")
+    
 
-    )
-
-
-
+    print("Fininshed training")
 

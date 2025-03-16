@@ -6,21 +6,6 @@ from torchvision import datasets, transforms, models
 from teacher import Teacher
 
 
-# def get_teacher_model():
-#     pretrained_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-#     model = models.resnet18(weights=None)
-#     model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
-#     model.fc = nn.Linear(512, 10)
-#     model_state_dict = pretrained_model.state_dict()
-
-#     for key in list(model_state_dict.keys()):
-#         if key not in model.state_dict() or model_state_dict[key].shape != model.state_dict()[key].shape:
-#             del model_state_dict[key]
-
-#     model.load_state_dict(model_state_dict, strict=False)
-#     return model
-
-
 def train_teacher(model, trainloader, criterion, optimizer, epochs, device):
     model.train()
     for epoch in range(epochs):
@@ -82,7 +67,6 @@ if __name__ == "__main__":
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model = Teacher().to(device)    
-    # model = get_teacher_model().to(device)
 
     criterion = nn.CrossEntropyLoss()   
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
