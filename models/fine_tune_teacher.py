@@ -1,9 +1,9 @@
 import torch
 import torch.optim as optim
 import torch.nn as nn
-from torch.utils.data import DataLoader 
-from torchvision import datasets, transforms, models
+from torchvision import datasets, transforms
 from teacher import Teacher
+from utils import get_dataloaders
 
 
 def train_teacher(model, trainloader, criterion, optimizer, epochs, device):
@@ -50,30 +50,18 @@ def evaluate(model, testloader, device):
 if __name__ == "__main__":
     batch_size = 64 
     learning_rate = 0.01    
-    epochs = 5
-
-    transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((224, 224)),  
-        transforms.ToTensor(),
-        transforms.Normalize((0.5), (0.5))
-    ])
-
-    trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)  
-    testset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)    
-
-    trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    testloader = DataLoader(testset, batch_size=batch_size, shuffle=False)
-
+    epochs = 10
+    img_size = (28, 28)
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    model = Teacher().to(device)    
+    trainloader, testloader = get_dataloaders(batch_size=batch_size, resize=img_size)
 
+    model = Teacher().to(device)    
     criterion = nn.CrossEntropyLoss()   
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     train_teacher(model, trainloader, criterion, optimizer, epochs, device)
     evaluate(model, testloader, device)
 
-    torch.save(model.state_dict(), "./trained_models/trained_teacher_state_dict.pth")
+    torch.save(model.state_dict(), "./trained_models/trained_teacher_state_dict_1.pth")
     
 

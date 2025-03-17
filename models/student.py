@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn 
-from utils import get_dataloaders
-
 
 class StudentCNN(nn.Module):
 
@@ -29,6 +27,28 @@ class StudentCNN(nn.Module):
 
             return x.size(1)
 
+    def extract_features(self, x, layers=["conv3"]):
+        features = {}   
+
+        x = self.pool(nn.functional.relu(self.conv1(x)))
+        if "conv1" in layers:
+            features["conv1"] = x
+        
+        x = self.pool(nn.functional.relu(self.conv2(x)))
+        if "conv2" in layers:   
+            features["conv2"] = x
+
+        x = self.pool(nn.functional.relu(self.conv3(x)))
+        if "conv3" in layers:
+            features["conv3"] = x
+
+        x = x.view(x.size(0), -1)
+        x = nn.functional.relu(self.fc1(x))
+        x = self.fc2(x)
+        features["final"] = x
+        
+        return features 
+
     def forward(self, x):
         x = self.pool(nn.functional.relu(self.conv1(x)))
         x = self.pool(nn.functional.relu(self.conv2(x)))
@@ -37,7 +57,8 @@ class StudentCNN(nn.Module):
         x = nn.functional.relu(self.fc1(x))
         x = self.fc2(x)
         return x
-    
+
+
 
 def count_params(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)    
@@ -58,8 +79,11 @@ def evaluate(model, testloader, device):
     print(f"test accuracy: {accuracy:.2f}%")
 
 
+
+
 if __name__ == "__main__":  
     
+    from utils import get_dataloaders
     _, testloader = get_dataloaders(batch_size=32, resize=(112, 112))
     device = "mps" if torch.backends.mps.is_available() else "cpu"  
     criterion = nn.CrossEntropyLoss()

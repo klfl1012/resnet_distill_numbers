@@ -2,24 +2,35 @@ import torch
 import torch.nn as nn
 
 
-def kd_loss(student_logits, teacher_logits, labels, alpha=0.5, temperature=4.0):
+def kl_loss(student_logits, teacher_logits, labels, alpha=0.5, temperature=4.0):
 
     student_probs = nn.functional.log_softmax(student_logits / temperature, dim=1)
     teacher_probs = nn.functional.softmax(teacher_logits / temperature, dim=1)
     kl_loss = nn.functional.kl_div(student_probs, teacher_probs, reduction="batchmean") * (temperature ** 2)
-    ce_loss = nn.CrossEntropyLoss()(student_logits, labels)
-    total_loss = alpha * kl_loss + (1 - alpha) * ce_loss
 
-    return total_loss
+    return kl_loss
 
 
 def policy_distillation_loss(student_logits, teacher_logits, temperature=4.0):  
 
     student_probs = nn.functional.softmax(student_logits / temperature, dim=1)
     teacher_probs = nn.functional.softmax(teacher_logits / temperature, dim=1)
-    loss = nn.functional.mse_loss(student_probs, teacher_probs)
+    policy_loss = nn.functional.mse_loss(student_probs, teacher_probs)
 
-    return loss
+    return policy_loss
+
+
+def attention_loss(student_feats, teacher_feats):
+
+    student_feats_map = torch.nn.functional.normalize(student_feats.pow(2).mean(1))
+    teacher_feats_map = torch.nn.functional.normalize(teacher_feats.pow(2).mean(1))
+
+    return nn.MSELoss(student_feats_map, teacher_feats_map) 
+
+
+def feature_distillation_loss(student_feats, teacher_feats):
+    return nn.MSELoss(student_feats, teacher_feats)
+    
 
 
 class Discriminator(nn.Module):

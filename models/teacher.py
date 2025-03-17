@@ -3,14 +3,6 @@ import torchvision.models as models
 import torch.optim as optim, torch.nn as nn
 
 
-# def get_teacher_model(model_path, device):
-#     model = torch.load(model_path, map_location=device, weights_only=False)
-#     model.to(device)
-#     model.eval()
-
-#     return model
-
-
 class Teacher(nn.Module):
     def __init__(self):
         super(Teacher, self).__init__()
@@ -32,21 +24,34 @@ class Teacher(nn.Module):
     def forward(self, x):
         return self.model(x)
     
-    def exrtact_features(self, x):
+    def extract_features(self, x, layers=["layer4"]):
         x = self.model.conv1(x)
         x = self.model.bn1(x)
         x = self.model.relu(x)
         x = self.model.maxpool(x)
-        
+
+        features = {}
         x = self.model.layer1(x)
+        if "layer1" in layers:
+            features["layer1"] = x
+
         x = self.model.layer2(x)
+        if "layer2" in layers:  
+            features["layer2"] = x
+
         x = self.model.layer3(x)
+        if "layer3" in layers:  
+            features["layer3"] = x
+
         x = self.model.layer4(x)
+        if "layer4" in layers:  
+            features["layer4"] = x
 
         x = self.model.avgpool(x)
         x = torch.flatten(x, 1)
-        return x 
+        features["final"] = x
 
+        return features
 
 
 if __name__ == "__main__":
