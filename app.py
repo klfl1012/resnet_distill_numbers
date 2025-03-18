@@ -1,16 +1,7 @@
 import streamlit as st 
 from streamlit_drawable_canvas import st_canvas
-from PIL import Image
-
-import torch
-import torch.nn as nn
-from torchvision import transforms
-
-from models.teacher import Teacher
-from models.student import StudentCNN 
+import pandas as pd 
 import time 
-import onnx, onnxruntime as ort 
-
 from loadmodels import ModelManager
 
 
@@ -25,10 +16,26 @@ class App:
         
         self.manager = ModelManager(config_paths="./models/configs/models_config.json") 
 
+        if "submitted" not in st.session_state:
+            st.session_state.submitted = False
+
+        if "img_tensor" not in st.session_state:
+            st.session_state.img_tensor = None
+
 
     @st.cache_resource
     def _get_models(self, model_name):
         return self.manager.load_model(model_name)
+
+    def _highlight_max(self, row, label):
+        colors = [""] * len(row)
+        max_index = row[1:].argmax().astype(int)   
+        argmax_col_name = str(max_index + 1)
+        if int(argmax_col_name) == label:
+            colors[row.index.get_loc(argmax_col_name)] = "background-color: green; color: white;"
+        else:
+            colors[row.index.get_loc(argmax_col_name)] = "background-color: red; color: white;"
+        return colors
 
     def _create_canvas(self):
         canvas_col, features_col = st.columns(2)
@@ -51,32 +58,41 @@ class App:
 
         if submit:
             if canvas_result.image_data is not None:
-                img_tensor = self.manager.transform_img(canvas_result.image_data[:, :, :3].astype("uint8"))                
+                st.session_state["img_tensor"] = self.manager.transform_img(canvas_result.image_data[:, :, :3].astype("uint8")) 
+                st.session_state["submitted"] = True               
 
         with features_col:
             st.write("Choose one or more models to predict the digit")
 
             toggle_teacher = st.toggle("Teacher")
             toggle_student = st.toggle("Student")
+            true_label = st.selectbox("True label", list(range(10)))
+            predict = st.button("Predict", disabled= not st.session_state["submitted"] or st.session_state["img_tensor"] is None)
 
-            predict = st.button("Predict")
-
-            if submit and predict:
+            if predict and true_label is not None: 
                 with st.spinner("Predicting..."):
                     try:
                         predictions = {}
 
                         if toggle_teacher:
-                            predictions["Teacher"] = self.manager.predict("teacher", img_tensor)
+                            predictions["Teacher"] = self.manager.predict("teacher", st.session_state["img_tensor"]).tolist()
 
                         if toggle_student:
-                            predictions["Student"] = self.manager.predict("student", img_tensor)
-
-                        for model_name, probs in predictions.items():
-                            st.write(f"{model_name} predicted: {probs.argmax()} with probability {probs.max():.2f}")
+                            predictions["Student"] = self.manager.predict("student", st.session_state["img_tensor"]).tolist()
                         
-                        time.sleep(3)
-                        st.success("Prediction done!")
+                        st.session_state["submitted"] = False
+                        st.session_state["img_tensor"] = None   
+
+                        predictions_flat = {model_name: probs[0] for model_name, probs in predictions.items()}
+                        df_predictions = pd.DataFrame.from_dict(predictions_flat, orient="index", columns=[str(i) for i in range(1, 11)])
+                        df_predictions.insert(0, "Model", df_predictions.index)
+                        df_predictions.reset_index(drop=True, inplace=True)
+                        styled_df = df_predictions.style.apply(lambda row: self._highlight_max(row, true_label), axis=1)
+
+                        time.sleep(1)
+                        st.success("Prediction successful")
+                        st.write("### Model Predictions")
+                        st.write(styled_df)
 
                     except Exception as e:
                         st.error(f"Prediction failed: {e}")

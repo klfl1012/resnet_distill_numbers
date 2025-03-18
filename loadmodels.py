@@ -2,7 +2,7 @@ import onnxruntime as ort
 import json
 from PIL import Image
 from torchvision import transforms
-
+import torch
 
 class ModelManager:
 
@@ -12,12 +12,10 @@ class ModelManager:
         self.providers, self.device = self.get_available_device()
 
     def load_config(self, config_path):
-        """Lädt die Modellkonfiguration aus einer JSON-Datei."""
         with open(config_path, "r") as f:
             return json.load(f)
 
     def get_available_device(self):
-        """Bestimmt das beste verfügbare Gerät (MPS, CUDA oder CPU)."""
         available_providers = ort.get_available_providers()
 
         if "MPSExecutionProvider" in available_providers:
@@ -57,6 +55,6 @@ class ModelManager:
 
         out = model.run(None, {"input": img_numpy})[0]
 
-        probs = ort.postprocess("softmax", out) 
+        probs = torch.nn.functional.softmax(torch.tensor(out), dim=1).cpu().numpy()
         return probs
         
