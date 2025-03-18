@@ -1,8 +1,8 @@
-import onnxruntime as ort
-import json
-from PIL import Image
+import onnxruntime as ort, numpy as np
+import torch, json, cv2
 from torchvision import transforms
-import torch
+from PIL import Image
+
 
 class ModelManager:
 
@@ -37,9 +37,12 @@ class ModelManager:
     
     def transform_img(self, img, resize=(28, 28)):
         img = Image.fromarray(img)
+        img = cv2.GaussianBlur(np.array(img), (5, 5), 0)
+        img = Image.fromarray(img)
+
         transform = transforms.Compose([
             transforms.Grayscale(num_output_channels=1), 
-            transforms.Resize(resize),
+            transforms.Resize(resize, interpolation=Image.LANCZOS),
             transforms.ToTensor(),
             transforms.Normalize((0.5), (0.5))
         ])
@@ -49,12 +52,11 @@ class ModelManager:
     def predict(self, model_name, img_tensor):
         if model_name not in self.models:
             self.load_model(model_name)
-        
+
         model = self.models[model_name]
         img_numpy = img_tensor.cpu().numpy().astype("float32")  
-
         out = model.run(None, {"input": img_numpy})[0]
-
         probs = torch.nn.functional.softmax(torch.tensor(out), dim=1).cpu().numpy()
+
         return probs
         

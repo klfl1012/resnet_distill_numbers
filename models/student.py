@@ -79,27 +79,27 @@ def evaluate(model, testloader, device):
     print(f"test accuracy: {accuracy:.2f}%")
 
 
-
-
 if __name__ == "__main__":  
     
     from utils import get_dataloaders
-    _, testloader = get_dataloaders(batch_size=32, resize=(112, 112))
+    _, testloader = get_dataloaders(batch_size=32, resize=(28, 28))
     device = "mps" if torch.backends.mps.is_available() else "cpu"  
     criterion = nn.CrossEntropyLoss()
+    student_params = {
+        "num_filters1": 8,
+        "num_filters2": 5,
+        "kernel_size1": 1,
+        "kernel_size2": 1,
+        "padding1": 1,
+        "padding2": 1,
+        "padding3": 1,
+        "hidden_units": 32,
+        "img_size": (28, 28)
+    }
 
-    student = StudentCNN(   
-        num_filters1=40,
-        num_filters2=32,
-        kernel_size1=1,
-        kernel_size2=1,
-        padding1=1,
-        padding2=1,
-        padding3=1,
-        hidden_units=128
-    ).to(device)
+    student = StudentCNN(**student_params).to(device)
 
-    student.load_state_dict(torch.load("./trained_models/trained_student.pth", map_location=device, weights_only=True), strict=False)
+    student.load_state_dict(torch.load("./trained_models/distilled_student_0.5_1.pth", map_location=device, weights_only=True), strict=False)
 
     evaluate(student, testloader, device)
 
