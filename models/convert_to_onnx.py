@@ -2,7 +2,7 @@ import torch
 import onnx
 from teacher import Teacher
 from student import StudentCNN
-
+from onnxruntime.quantization import quantize_dynamic, QuantType    
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
@@ -46,4 +46,10 @@ torch.onnx.export(
     output_names=["output"],
     dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}}
 )
+
+
+quantized_student = quantize_dynamic("./onnx_models/student.onnx", "./onnx_models/student_quantized.onnx", weight_type=QuantType.QUInt8)
+quantized_teacher = quantize_dynamic("./onnx_models/teacher.onnx", "./onnx_models/teacher_quantized.onnx", weight_type=QuantType.QUInt8)
+
+
 

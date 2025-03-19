@@ -1,4 +1,5 @@
-import torch, torch.nn as nn, torch.optim as optim
+import torch, torch.nn as nn, torch.optim as optim, numpy as np, pandas as pd, psutil, os, time
+from sklearn.metrics import precision_score, recall_score, f1_score
 from student import StudentCNN
 from teacher import Teacher
 from distill import policy_distillation_loss, kl_loss, attention_loss, feature_distillation_loss, adversarial_distillation, Discriminator
@@ -95,20 +96,105 @@ class Trainer:
                 print("Early stopping")
                 break
 
-    def evaluate(self):
+    # def evaluate(self):
+    #     self.student.eval()
+    #     correct, total = 0, 0.0
+
+    #     with torch.no_grad():
+    #         for imgs, labels in self.testloader:
+    #             imgs, labels = imgs.to(self.device), labels.to(self.device)
+    #             outs = self.student(imgs)
+    #             _, predicted = torch.max(outs, 1)
+    #             total += labels.size(0)
+    #             correct += (predicted == labels).sum().item()
+    #     accuracy = 100 * correct / total    
+    #     print(f"Test accuracy: {accuracy:.2f}%")
+
+    def evaluate(self, file_name=""):
         self.student.eval()
-        correct, total = 0, 0.0
+        self.teacher.eval()
+
+        correct, total = 0, 0.0 
+
+        all_labels = []
+        all_preds = []
+        all_teacher_logits = []
+        all_student_logits = []
+
+        criterion = nn.CrossEntropyLoss()
+
+        process = psutil.Process(os.getpid())
+        mem_before = process.memory_info().rss / 1024 ** 2
+
+        student_inference_times = []
+        teacher_inference_times = []
 
         with torch.no_grad():
             for imgs, labels in self.testloader:
                 imgs, labels = imgs.to(self.device), labels.to(self.device)
-                outs = self.student(imgs)
-                _, predicted = torch.max(outs, 1)
+
+                start_time_teacher = time.time()
+                teacher_outs = self.teacher(imgs)
+                teacher_inference_times.append(time.time() - start_time_teacher) 
+
+                start_time_student = time.time()    
+                student_outs = self.student(imgs)
+                student_inference_times.append(time.time() - start_time_student)
+
+                _, predicted = torch.max(student_outs, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
-        accuracy = 100 * correct / total    
-        print(f"Test accuracy: {accuracy:.2f}%")
 
+                loss = criterion(student_outs, labels)  
+                total_loss += loss.item()
+
+                all_teacher_logits.append(teacher_outs.cpu().numpy())
+                all_student_logits.append(student_outs.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+                all_preds.extend(predicted.cpu().numpy())
+
+            accuracy = correct / total  * 100
+            avg_loss = total_loss / len(self.testloader)    
+            precision = precision_score(all_labels, all_preds, average="weighted")
+            recall = recall_score(all_labels, all_preds, average="weighted")
+            f1 = f1_score(all_labels, all_preds, average="weighted")
+
+            all_teacher_logits = np.stack(all_teacher_logits)
+            all_student_logits = np.stack(all_student_logits)
+
+            kl_div = torch.functional.kl_div(
+                torch.log_softmax(student_outs, dim=1), 
+                torch.softmax(teacher_outs, dim=1), 
+                reduction="batchmean"
+            )
+
+            teacher_mean = all_teacher_logits.mean(axis=0)
+            student_mean = all_student_logits.mean(axis=0)
+
+            logtis_correlation = np.corrcoef(teacher_mean, student_mean)[0, 1]
+
+            avg_student_time = np.mean(student_inference_times) * 1000
+            avg_teacher_time = np.mean(teacher_inference_times) * 1000
+
+            mem_after = process.memory_info().rss / 1024 ** 2
+            mem_usage = mem_after - mem_before
+
+            results = pd.DataFrame({
+                "Accuracy": accuracy,
+                "CrossEntropyLoss": avg_loss,
+                "Precision": precision, 
+                "Recall": recall,
+                "F1": f1,
+                "KL-Div": kl_div.item(),
+                "Logits Correlation": logtis_correlation,   
+                "Avg Student Inference Time (ms)": avg_student_time,
+                "Avg Teacher Inference Time (ms)": avg_teacher_time,
+                "Memory Usage (MB)": mem_usage
+            })  
+                
+            results.to_csv(f"./logs/eval/{file_name}.csv", index=False)
+            print(results)
+            return results
 
 
 if __name__ == "__main__":
@@ -119,6 +205,11 @@ if __name__ == "__main__":
     temperature = 4.0   
     batch_size = 32
     teacher_path = "./trained_models/trained_teacher_state_dict_1.pth"
+
+
+    teachercnn_params = ""
+    studentcnn_params = ""
+
     student_params = {
         "num_filters1": 8,
         "num_filters2": 5,

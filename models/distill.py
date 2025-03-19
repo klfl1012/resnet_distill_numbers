@@ -30,7 +30,7 @@ def attention_loss(student_feats, teacher_feats):
 
 def feature_distillation_loss(student_feats, teacher_feats):
     return nn.MSELoss(student_feats, teacher_feats)
-    
+
 
 
 class Discriminator(nn.Module):

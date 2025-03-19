@@ -44,10 +44,10 @@ class ModelManager:
             transforms.Grayscale(num_output_channels=1), 
             transforms.Resize(resize, interpolation=Image.LANCZOS),
             transforms.ToTensor(),
-            transforms.Normalize((0.5), (0.5))
+            transforms.Normalize((0.1307,), (0.3081,))
         ])
 
-        return transform(img).unsqueeze(0).to(self.device)
+        return transform(img).to(self.device)
 
     def predict(self, model_name, img_tensor):
         if model_name not in self.models:
