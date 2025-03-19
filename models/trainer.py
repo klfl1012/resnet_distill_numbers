@@ -1,37 +1,43 @@
-import torch, torch.nn as nn, torch.optim as optim, numpy as np, pandas as pd, psutil, os, time
+import torch, torch.nn as nn, torch.optim as optim, numpy as np, pandas as pd, psutil, os, time, json, logging
 from sklearn.metrics import precision_score, recall_score, f1_score
+from typing import List
+
 from student import StudentCNN
-from teacher import Teacher
-from distill import policy_distillation_loss, kl_loss, attention_loss, feature_distillation_loss, adversarial_distillation, Discriminator
+from teacher import TeacherCNN, Teacher
+from distill import policy_distillation_loss, kl_loss, attention_loss, feature_distillation_loss
 from utils import get_dataloaders
 
 
-class Trainer:
+class TrainManager:
 
-    def __init__(self, teacher_path, student_params, trainloader, testloader, device, method="kd", alpha=0.5, temperature=4.0, lr=0.001):
+    def __init__(
+            self, 
+            teacher: nn.Module, 
+            student: nn.Module, 
+            trainloader: torch.utils.data.DataLoader, 
+            testloader: torch.utils.data.DataLoader, 
+            device: str,
+            method: List=["kd", "policy", "attention", "feature", "self", "adv"], 
+            alpha: float=0.5, 
+            temperature: float=4.0, 
+            lr: float=0.001
+        ):
         self.device = device
-        self.teacher = Teacher().to(device)
-        self.teacher.load_state_dict(torch.load(teacher_path, map_location=device))
-        self.student = StudentCNN(**student_params).to(device)  
+        self.teacher = teacher.to(device)
+        self.student = student.to(device)
         self.trainloader = trainloader
         self.testloader = testloader
         self.method = method
         self.alpha = alpha
         self.temperature = temperature
         self.lr = lr
+        self.optimizer = optim.Adam(self.student.parameters(), lr=self.lr)
 
-        self.optimizer_S = optim.Adam(self.student.parameters(), lr=self.lr)
-
-        if method == "adv":
-            feature_dim = student_params["hidden_units"]
-            self.discriminator = Discriminator(feature_dim=feature_dim).to(device)
-            self.optimizer_D = optim.Adam(self.discriminator.parameters(), lr=self.lr)
-            self.ciriterion_adv = nn.BCELoss()  
 
     def train(self, epochs):
         self.teacher.eval()
         self.student.train()
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_S, mode="min", factor=0.1, patience=3)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode="min", factor=0.1, patience=3)
         relative_improvement_threshold = 0.01
         best_loss = float("inf")
         patience = 0
@@ -41,16 +47,10 @@ class Trainer:
 
             total_loss = 0.0
 
-            if self.method == "adv":
-                adversarial_distillation(
-                    self.student, self.teacher, self.discriminator, self.optimizer_S, self.optimizer_D, self.criterion_adv, self.trainloader, self.device
-                )
-                continue
-
             for imgs, labels in self.trainloader:
                 imgs, labels = imgs.to(self.device), labels.to(self.device)
 
-                self.optimizer_S.zero_grad(set_to_none=True)
+                self.optimizer.zero_grad(set_to_none=True)
 
                 teacher_outs = self.teacher(imgs).detach()
                 student_outs = self.student(imgs)
@@ -79,13 +79,13 @@ class Trainer:
 
                 loss = alpha * hard_loss + (1 - alpha) * soft_loss
                 loss.backward()
-                self.optimizer_S.step()
+                self.optimizer.step()
 
                 total_loss += loss.item()
 
             avg_loss = total_loss / len(self.trainloader)
             scheduler.step(loss)
-            print(f"Epoch {epoch + 1}, loss: {avg_loss:.4f}")
+            logging.info(f"Epoch {epoch + 1}, loss: {avg_loss:.4f}")
 
             if avg_loss < best_loss - relative_improvement_threshold:
                 best_loss = avg_loss
@@ -93,28 +93,15 @@ class Trainer:
             else:
                 patience += 1
             if epochs_no_improvement > patience:
-                print("Early stopping")
+                logging.info("Early stopping")
                 break
 
-    # def evaluate(self):
-    #     self.student.eval()
-    #     correct, total = 0, 0.0
-
-    #     with torch.no_grad():
-    #         for imgs, labels in self.testloader:
-    #             imgs, labels = imgs.to(self.device), labels.to(self.device)
-    #             outs = self.student(imgs)
-    #             _, predicted = torch.max(outs, 1)
-    #             total += labels.size(0)
-    #             correct += (predicted == labels).sum().item()
-    #     accuracy = 100 * correct / total    
-    #     print(f"Test accuracy: {accuracy:.2f}%")
 
     def evaluate(self, file_name=""):
         self.student.eval()
         self.teacher.eval()
 
-        correct, total = 0, 0.0 
+        correct, total_loss = 0, 0.0 
 
         all_labels = []
         all_preds = []
@@ -142,7 +129,7 @@ class Trainer:
                 student_inference_times.append(time.time() - start_time_student)
 
                 _, predicted = torch.max(student_outs, 1)
-                total += labels.size(0)
+                total_loss += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
                 loss = criterion(student_outs, labels)  
@@ -153,16 +140,16 @@ class Trainer:
                 all_labels.extend(labels.cpu().numpy())
                 all_preds.extend(predicted.cpu().numpy())
 
-            accuracy = correct / total  * 100
+            accuracy = correct / total_loss  * 100
             avg_loss = total_loss / len(self.testloader)    
             precision = precision_score(all_labels, all_preds, average="weighted")
             recall = recall_score(all_labels, all_preds, average="weighted")
             f1 = f1_score(all_labels, all_preds, average="weighted")
 
-            all_teacher_logits = np.stack(all_teacher_logits)
-            all_student_logits = np.stack(all_student_logits)
+            all_teacher_logits = np.concatenate(all_teacher_logits, axis=0)
+            all_student_logits = np.concatenate(all_student_logits, axis=0)
 
-            kl_div = torch.functional.kl_div(
+            kl_div = torch.nn.functional.kl_div(
                 torch.log_softmax(student_outs, dim=1), 
                 torch.softmax(teacher_outs, dim=1), 
                 reduction="batchmean"
@@ -180,74 +167,90 @@ class Trainer:
             mem_usage = mem_after - mem_before
 
             results = pd.DataFrame({
-                "Accuracy": accuracy,
-                "CrossEntropyLoss": avg_loss,
-                "Precision": precision, 
-                "Recall": recall,
-                "F1": f1,
-                "KL-Div": kl_div.item(),
-                "Logits Correlation": logtis_correlation,   
-                "Avg Student Inference Time (ms)": avg_student_time,
-                "Avg Teacher Inference Time (ms)": avg_teacher_time,
-                "Memory Usage (MB)": mem_usage
-            })  
+                "Accuracy": [accuracy],
+                "CrossEntropyLoss": [avg_loss],
+                "Precision": [precision], 
+                "Recall": [recall],
+                "F1": [f1],
+                "KL-Div": [kl_div.item()],
+                "Logits Correlation": [logtis_correlation],   
+                "Avg Student Inference Time (ms)": [avg_student_time],
+                "Avg Teacher Inference Time (ms)": [avg_teacher_time],
+                "Memory Usage (MB)": [mem_usage]
+            }, index=[file_name])  
                 
             results.to_csv(f"./logs/eval/{file_name}.csv", index=False)
-            print(results)
             return results
 
 
 if __name__ == "__main__":
 
+    # Logging config
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler("./logs/training.log", mode="w")
+        ]
+    )
+
+    # Config parameters
     device = "mps" if torch.backends.mps.is_available() else "cpu"
+    teacher_paths = {
+        "teacher": "./trained_models/trained_teacher_state_dict_1.pth",
+        "teachercnn": "./trained_models/teachercnn_1.pth"
+    }
+    teachercnn_config_file = "./configs/teachercnn_params.json"
+    with open(teachercnn_config_file, "r") as f:
+        teachercnn_params = json.load(f) 
+
+    student_config_file = "./configs/studentcnn_params.json"
+    with open(student_config_file, "r") as f:
+        studentcnn_params = json.load(f)
+
+    # Training parameters 
     img_size = (28, 28)
     lr = 0.001
     temperature = 4.0   
     batch_size = 32
-    teacher_path = "./trained_models/trained_teacher_state_dict_1.pth"
+    epochs = 2
+    alphas = [0]
+    methods = ["kd"]
 
-
-    teachercnn_params = ""
-    studentcnn_params = ""
-
-    student_params = {
-        "num_filters1": 8,
-        "num_filters2": 5,
-        "kernel_size1": 1,
-        "kernel_size2": 1,
-        "padding1": 1,
-        "padding2": 1,
-        "padding3": 1,
-        "hidden_units": 32,
-        "img_size": img_size
-    }
-    alphas = [0, 0.5, 1]
-    methods = ["attention", "feature"]
-    # methods = ["kd", "policy", "attention", "feature"]
-
-    epochs = 15
+    # Train- and Testloader
     trainloader, testloader = get_dataloaders(batch_size=batch_size, resize=img_size) 
 
-    for method in methods:
-        for alpha in alphas:
-            print(f"Training student with method: {method}, alpha: {alpha}")   
-            trainer = Trainer(
-                teacher_path=teacher_path,
-                student_params=student_params,
-                trainloader=trainloader,    
-                testloader=testloader,
-                device=device,
-                method="kd",
-                alpha=alpha,
-                temperature=temperature,
-                lr=lr
-            )
-            trainer.train(epochs=epochs)
-            trainer.evaluate()
-            torch.save(trainer.student.state_dict(), f"./trained_models/d_s_{method}_{alpha}_1.pth")
+    # Training loop
+    for teacher_name, teacher_path in teacher_paths.items():
+        logging.info(f"Training student with teacher: {teacher_name}")  
 
-    print("Fininshed training")
+        if teacher_name == "teachercnn":
+            teacher = TeacherCNN(img_size=img_size,**teachercnn_params).to(device)
+        else:
+            teacher = Teacher().to(device)  
 
+        teacher.load_state_dict(torch.load(teacher_path, map_location=device))
+        teacher.eval()
 
+        for method in methods:
+            for alpha in alphas:
+                logging.info(f"Training student with teacher: {teacher_name}, method: {method}, alpha: {alpha}")   
 
-# relative impr threshold mit acc sodass net overfitted
+                trainer = TrainManager(
+                    teacher=teacher,
+                    student=StudentCNN(img_size=img_size, **studentcnn_params).to(device),
+                    trainloader=trainloader,
+                    testloader=testloader,
+                    device=device,
+                    method=method,
+                    alpha=alpha,
+                    temperature=temperature,
+                    lr=lr
+                )
+                alpha_str = str(alpha).replace('.', '_')
+                trainer.train(epochs=epochs)
+                trainer.evaluate(file_name=f"{teacher_name}_{method}_{alpha_str}")
+                torch.save(trainer.student.state_dict(), f"./trained_models/ds_model_{teacher_name}_{method}_{alpha_str}.pth")
+    
+    logging.info("Finished training")

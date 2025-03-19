@@ -57,7 +57,7 @@ class Teacher(nn.Module):
 
 class TeacherCNN(nn.Module):
 
-    def __init__(self, num_filters1, num_filters2, num_filters3, kernel_size1, kernel_size2, kernel_size3, padding1, padding2, padding3, hidden_units, img_size=(224, 224)):
+    def __init__(self, num_filters1, num_filters2, num_filters3, kernel_size1, kernel_size2, kernel_size3, padding1, padding2, padding3, hidden_units, img_size=(28, 28)):
         super(TeacherCNN, self).__init__()
 
         self.conv1 = nn.Conv2d(1, num_filters1, kernel_size=kernel_size1, padding=padding1)

@@ -3,7 +3,7 @@ import torch.nn as nn
 
 class StudentCNN(nn.Module):
 
-    def __init__(self, num_filters1, num_filters2, num_filters3, kernel_size1, kernel_size2, kernel_size3, padding1, padding2, padding3, hidden_units, img_size=(224, 224)):
+    def __init__(self, num_filters1, num_filters2, num_filters3, kernel_size1, kernel_size2, kernel_size3, padding1, padding2, padding3, hidden_units, img_size=(28, 28)):
         super(StudentCNN, self).__init__()
 
         self.conv1 = nn.Conv2d(1, num_filters1, kernel_size=kernel_size1, padding=padding1)
@@ -22,7 +22,6 @@ class StudentCNN(nn.Module):
             x = self.pool(nn.functional.relu(self.conv1(x)))
             x = self.pool(nn.functional.relu(self.conv2(x)))
             x = self.pool(nn.functional.relu(self.conv3(x)))
-            # x = x.numel() // x.size(0)
             x = x.view(x.size(0), -1)
 
             return x.size(1)
@@ -79,27 +78,5 @@ def evaluate(model, testloader, device):
 
 
 if __name__ == "__main__":  
+    pass    
     
-    from utils import get_dataloaders
-    _, testloader = get_dataloaders(batch_size=32, resize=(28, 28))
-    device = "mps" if torch.backends.mps.is_available() else "cpu"  
-    criterion = nn.CrossEntropyLoss()
-    student_params = {
-        "num_filters1": 8,
-        "num_filters2": 5,
-        "kernel_size1": 1,
-        "kernel_size2": 1,
-        "padding1": 1,
-        "padding2": 1,
-        "padding3": 1,
-        "hidden_units": 32,
-        "img_size": (28, 28)
-    }
-
-    student = StudentCNN(**student_params).to(device)
-
-    student.load_state_dict(torch.load("./trained_models/distilled_student_0.5_1.pth", map_location=device, weights_only=True), strict=False)
-
-    evaluate(student, testloader, device)
-
-    print(f"Number of parameters: {count_params(student)}")
