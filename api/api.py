@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException    
+from fastapi import FastAPI, HTTPException    
 import onnxruntime as ort, numpy as np, cv2, torch, json
 from loadmodels import ModelManager
 from pydantic import BaseModel

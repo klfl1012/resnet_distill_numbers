@@ -85,8 +85,24 @@ if __name__ == "__main__":
         "hidden_units": 128,
         "img_size": img_size
     }
-    model = TeacherCNN(**teachercnn_params).to(device) 
+    studentcnn =  {
+        "num_filters1": 8,
+        "num_filters2": 8,
+        "num_filters3": 10,  
+        "kernel_size1": 1,
+        "kernel_size2": 1,
+        "kernel_size3": 1,
+        "padding1": 1,       
+        "padding2": 1,
+        "padding3": 1,       
+        "hidden_units": 32,
+        "img_size": img_size
+    }
+
+
+    # model = TeacherCNN(**teachercnn_params).to(device) 
     # model = Teacher().to(device)    
+    model = StudentCNN(**studentcnn).to(device)
     criterion = nn.CrossEntropyLoss()   
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -95,5 +111,5 @@ if __name__ == "__main__":
     train_teacher(model, trainloader, criterion, optimizer, epochs, device)
     evaluate(model, testloader, device)
 
-    torch.save(model.state_dict(), "./trained_models/teachercnn_1.pth")
+    torch.save(model.state_dict(), "./trained_models/studentcnn_1.pth")
     

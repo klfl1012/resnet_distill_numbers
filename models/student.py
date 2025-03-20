@@ -26,7 +26,7 @@ class StudentCNN(nn.Module):
 
             return x.size(1)
 
-    def extract_features(self, x, layers=["conv3"]):
+    def extract_features(self, x, layers=["final"]):
         features = {}   
 
         x = self.pool(nn.functional.relu(self.conv1(x)))

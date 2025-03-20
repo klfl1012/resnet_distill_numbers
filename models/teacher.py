@@ -49,7 +49,10 @@ class Teacher(nn.Module):
 
         x = self.model.avgpool(x)
         x = torch.flatten(x, 1)
-        features["final"] = x
+
+        x = self.model.fc(x)    
+        if "final" in layers:   
+            features["final"] = x
 
         return features
 
@@ -80,7 +83,7 @@ class TeacherCNN(nn.Module):
 
             return x.size(1)
 
-    def extract_features(self, x, layers=["conv3"]):
+    def extract_features(self, x, layers=["final"]):
         features = {}   
 
         x = self.pool(nn.functional.relu(self.conv1(x)))
