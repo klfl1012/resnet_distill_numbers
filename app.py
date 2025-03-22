@@ -1,12 +1,12 @@
-import streamlit as st, pandas as pd, numpy as np, time, requests
-from PIL import Image
+import streamlit as st, pandas as pd, numpy as np, time, requests, os
 from streamlit_drawable_canvas import st_canvas
 from torchvision import transforms
 from loadmodels import ModelManager
 from models.utils import get_dataloaders
 
-API_URL = "http://127.0.0.1:8000"
-
+# API_URL = "http://127.0.0.1:8000"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+print(f"Using API URL: {API_URL}")
 
 class App:
     def __init__(self):

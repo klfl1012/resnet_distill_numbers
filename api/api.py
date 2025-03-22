@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException    
-import onnxruntime as ort, numpy as np, torch
-from loadmodels import ModelManager
+import numpy as np, torch
 from pydantic import BaseModel
+from loadmodels import ModelManager
 
 app = FastAPI()
 manager = ModelManager(config_paths="./models/configs/models_config.json")
