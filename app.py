@@ -67,14 +67,19 @@ class App:
         st.write("Choose one or more models to predict the digit")
         toggle_teacher = st.toggle("Teacher", value=True)
         toggle_student = st.toggle("Student", value=True)
+        toggle_attention = st.toggle("Attention", value=True)
+        toggle_features = st.toggle("Features", value=True)
+        toggle_policy = st.toggle("Policy", value=True)
+        toggle_kd = st.toggle("Knowledge Distillation", value=True)
         true_label = st.selectbox("True label", list(range(10)), index=st.session_state["true_label"] if st.session_state["true_label"] is not None else 0)
 
         predict = st.button("Predict", disabled=not st.session_state["submitted"] or st.session_state["img_tensor"] is None)
 
         if predict and true_label is not None: 
-            self._predict_from_api(true_label, toggle_teacher, toggle_student)
+            self._predict_from_api(true_label, toggle_teacher, toggle_student, toggle_attention, toggle_features, toggle_kd, toggle_policy)
 
-    def _predict(self, true_label, toggle_teacher, toggle_student):
+    def _predict(self, true_label, toggle_teacher, toggle_student, toggle_attention, toggle_features, toggle_kd, toggle_policy):  
+        """deprecated"""
         with st.spinner("Predicting..."):
             try:
 
@@ -88,6 +93,18 @@ class App:
 
                 if toggle_student:
                     predictions["Student"] = self.manager.predict("student", st.session_state["img_tensor"]).tolist()
+
+                if toggle_attention:
+                    predictions["Attention"] = self.manager.predict("attention", st.session_state["img_tensor"]).tolist()
+                
+                if toggle_features:
+                    predictions["Features"] = self.manager.predict("features", st.session_state["img_tensor"]).tolist()
+                
+                if toggle_kd:
+                    predictions["Knowledge Distillation"] = self.manager.predict("kd", st.session_state["img_tensor"]).tolist()
+
+                if toggle_policy:
+                    predictions["Policy"] = self.manager.predict("policy", st.session_state["img_tensor"]).tolist()
 
                 predictions_flat = {model_name: probs[0] for model_name, probs in predictions.items()}
                 df_predictions = pd.DataFrame.from_dict(predictions_flat, orient="index", columns=[str(i) for i in range(10)])
@@ -104,7 +121,7 @@ class App:
                 st.error(f"Prediction failed: {e}")
 
 
-    def _predict_from_api(self, true_label, toggle_teacher, toggle_student):
+    def _predict_from_api(self, true_label, toggle_teacher, toggle_student, toggle_attention, toggle_features, toggle_kd, toggle_policy):
         with st.spinner("Predicting..."):
             try:
 
@@ -112,13 +129,20 @@ class App:
                     st.error("No image to predict")
                     return
                 
-                files = {"file": st.session_state["img_tensor"]}
                 selected_models = []
 
                 if toggle_teacher:
                     selected_models.append("teacher")
                 if toggle_student:
                     selected_models.append("student")
+                if toggle_attention:
+                    selected_models.append("attention")
+                if toggle_features:
+                    selected_models.append("features")
+                if toggle_kd:
+                    selected_models.append("kd")
+                if toggle_policy:
+                    selected_models.append("policy")
 
                 img_numpy = st.session_state["img_tensor"].cpu().numpy().tolist()
 

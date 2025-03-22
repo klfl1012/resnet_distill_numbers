@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException    
-import onnxruntime as ort, numpy as np, cv2, torch, json
+import onnxruntime as ort, numpy as np, torch
 from loadmodels import ModelManager
 from pydantic import BaseModel
 
@@ -16,7 +16,7 @@ def list_models():
 
 class ImageRequest(BaseModel):
     image: list
-    model_list: list = ["teacher", "student"]
+    model_list: list = ["teacher", "student", "features", "attention", "kd", "policy"]
 
 
 @app.post("/predict/")

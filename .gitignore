@@ -1,0 +1,10 @@
+old/
+data/MNIST
+models/data/MNIST
+models/trained_models/
+models/onnx_models/bucket/
+models/logs
+models/configs
+.cv_venv/
+*.pyc
+
